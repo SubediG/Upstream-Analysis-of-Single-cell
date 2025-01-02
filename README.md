@@ -1,1 +1,1 @@
-# Upstream-Analysis-of-Single-cell
+# Single-Cell RNA Sequencing Analysis Pipeline
