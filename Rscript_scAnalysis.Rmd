@@ -1,43 +1,8 @@
----
-title: "Upstream Analysis of Single-soma transcriptomics of tangle-bearing neurons in Alzheimer’s disease - Inhibitory"
-author: "Gautam Subedi"
-date: "2025-01-02"
-output:
-  pdf_document: default
-  html_document: default
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-## STEPS INCLUDES
-1. Loading the required packages and dataset
-2. Exploratory Data Analysis and pre-processing:
-  i). mitochondiral percentage cutoffs
-  ii).nFeature_RNA cutoffs
-  iii).nCount_RNA cutoffs
-3). Data Normalization
-4). Finding Variables Features
-5). Data Scaling
-6). Linear Dimensionality Reduction : PCA
-7). Non-linear Dimensionality Redcution: UMAP
-8). Finding Neighbours and Clusters based on condition (Alzheimer’s disease Vs Normal)
-9). Comparison of cluster with removal of batch effects
-
 Link to dataset: https://cellxgene.cziscience.com/e/9813a1d4-d107-459e-9b2e-7687be935f69.cxg/
 
-
-
-
-
-
-
 ##. Loading required library and dataset
-```{r cars}
 setwd("/Users/lord/singleCell")
 list.files(all.files = TRUE, full.names = TRUE)
-
 
 library(Seurat)
 library(patchwork)
@@ -49,148 +14,89 @@ library(ggplot2)
 library(cowplot)
 
 file <- readRDS("ScSoma_Alzhemeir.rds")
-```
 
 ## Head view of data and adding mitochondiral percentage feature in the seurat dataset for later subsetting data
-```{r pressure, echo=FALSE}
 head(file)
 file[["mito_percent"]] <- PercentageFeatureSet(file, pattern = "^MT-")
-```
 
 ##. Extracting row names into new column called sample and separating sample column into patient and barcode for identifying clusters based on patient
-```{r}
 file$sample <- rownames(file@meta.data)
 file@meta.data <- separate(file@meta.data, col = 'sample', into = c('Patient', 'Barcode'),sep = '_')
-```
-
 
 ## Violin plot to identfy the variation in the dataset with three features
-```{r}
 VlnPlot(file, features = c("nFeature_RNA", "nCount_RNA", "mito_percent"), ncol = 3)
-```
-
 
 ## Scatter plot to visualize and identify the cutoff margins of the feature and counts
-```{r}
 FeatureScatter(file, feature1 = "nFeature_RNA" , feature2 = "nCount_RNA") + geom_smooth(method = "lm") 
-```
-
-
 
 ##. Violin plot after data cleaning with cutoffs
-```{r}
 file_subset <- subset(file, subset = nFeature_RNA > 1000 & nFeature_RNA <5000 &nCount_RNA > 800)
 VlnPlot(file_subset, features = c("nFeature_RNA" , "nCount_RNA"), ncol = 2)
-```
-
-
 
 ##. Scatter Plot after data cleaning to check the fit of the line
-```{r}
 FeatureScatter(file_subset, feature1 ="nFeature_RNA" , feature2 = "nCount_RNA") + geom_smooth(method = "lm") 
-```
 
 ##. Log Normalization
-```{r}
 file_subset <- NormalizeData(file_subset, normalization.method = "LogNormalize" , scale.factor = 10000)
-```
 
 ##. Finding varibale features from a normalized data
-```{r}
 file_subset <- FindVariableFeatures(file_subset, selection.method = "vst", nfeatures = 2000)
-```
 
 ## Identification of top 10 highly vairbale features and variable feature plot
-```{r}
 top10 <- head(VariableFeatures(file_subset), 10)
 
 # plot variable features with and without labels
 plot1 <- VariableFeaturePlot(file_subset)
 plot1
-```
-
 
 ##. Variable feature plot with gene(features) name
-```{r}
 plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE,  xnudge = 0, ynudge = 0)
 plot2
-```
-
 
 ##. Scaling the dataset to have mean as 0 and standard deviation as 1, so that there will be no effect of highly varibale genes into downstream analysis
-```{r}
 all.genes <- rownames(file_subset)
 file_subset <- ScaleData(file_subset, features = all.genes)
-```
-
-
 
 ## Linear dimensionality reduction using PCA
-```{r}
 file_subset <-RunPCA(file_subset)
-```
+
 ##. Plot visualizing principle componenet 1 and 2
-```{r}
 VizDimLoadings(file_subset, dims = 1:2, reduction = "pca")
-```
 
 ##. Elbow plot to determine number of pricinple component required to have  data information
-```{r}
 ElbowPlot(file_subset)
-```
-
 
 ##. Finding neighbors and clusters of the features
-```{r}
 file_subset <- FindNeighbors(file_subset, dims = 1:18, graph.name = "RNA_snn")
 file_subset <- FindClusters(file_subset)
 table(file_subset$seurat_clusters)
-```
-
 
 ##. All 20 can be used but decided to use 18 dimensions of PC from the elbow plot
-```{r}
 file_subset <- RunUMAP(file_subset, dims = 1:18, reduction = 'pca')
-```
-
-
 
 ##. Dimplot to visualize seurat cluster, cluster based on condition(Disease and patient)
-```{r}
 seurat_cluster <- DimPlot(file_subset, reduction = "umap", group.by = "seurat_clusters", label = TRUE)
 Patient_before_harmony <- DimPlot(file_subset, reduction = "umap", group.by = "Patient")
 disease_before_harmony <- DimPlot(file_subset, reduction = "umap", group.by = "disease")
 seurat_cluster
 
-```
-
 ## Visualization of a patient VS disease cluster
-```{r}
 Patient_before_harmony
-```
-
 
 ##. Visualization od disease clusters
-```{r}
 disease_before_harmony
-```
 
 
 ##. Harmony to remove batch effect as the Dimplot of disease conditions is slightly misleading cluster 2 and 1, it will remove the batch effects
-```{r}
-
 # Apply Harmony to remove batch effect based on the 'disease' column
 harmony_subset <- RunHarmony(
   object = file_subset, 
   group.by.vars = "disease", 
   dims.use = 1:18  # Use the same dimensions you selected in FindNeighbors
 )
-```
-
 
 
 ##. Running UMAP, FindingNeighbors, Clusters again but using redution as harmony this time
-```{r}
 harmony_subset <- harmony_subset%>%
   RunUMAP(reduction = 'harmony',dims = 1:18) %>%
   FindNeighbors(reduction = 'harmony' , dims = 1:18) %>%
@@ -198,15 +104,10 @@ harmony_subset <- harmony_subset%>%
 
 disease_After_harmony <- DimPlot(harmony_subset,reduction = 'umap', group.by = 'disease')
 Seurat_cluster_After_harmony <- DimPlot(harmony_subset,reduction = 'umap', group.by = "seurat_clusters")
-```
 
 
 ##. Dimplot of before VS After of condition(disease) after batch correction
-```{r}
-disease_before_harmony
-```
-```{r}
-disease_After_harmony
-```
+disease_before_harmony | disease_After_harmony
+
 
 
